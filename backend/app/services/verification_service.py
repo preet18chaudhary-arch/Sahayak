@@ -93,6 +93,77 @@ def check_name_consistency(session) -> tuple[int, int]:
 
     return consistent_count, mismatch_count
 
+
+def normalize_date_of_birth(value: str) -> str:
+    """Normalize a date of birth so common separators are treated equally."""
+
+    return value.strip().replace("-", "/")
+
+
+def check_dob_consistency(session) -> tuple[int, int]:
+    """Check whether date of birth values are exactly consistent across documents."""
+
+    dob_fields = [
+        field
+        for field in session.extracted_fields
+        if field.field_name == "date_of_birth"
+    ]
+
+    if len(dob_fields) < 2:
+        return 0, 0
+
+    reference_dob = normalize_date_of_birth(dob_fields[0].value)
+    reference_doc_id = dob_fields[0].source_doc_id
+
+    consistent_count = 0
+    mismatch_count = 0
+
+    for field in dob_fields[1:]:
+        current_dob = normalize_date_of_birth(field.value)
+
+        if reference_dob == current_dob:
+            consistent_count += 1
+            continue
+
+        mismatch_count += 1
+
+        reference_doc = next(
+            (
+                doc
+                for doc in session.documents
+                if doc.doc_id == reference_doc_id
+            ),
+            None,
+        )
+
+        current_doc = next(
+            (
+                doc
+                for doc in session.documents
+                if doc.doc_id == field.source_doc_id
+            ),
+            None,
+        )
+
+        if reference_doc and current_doc:
+            session.discrepancies.append(
+                Discrepancy(
+                    id=f"disc_{session.session_id}_{len(session.discrepancies) + 1}",
+                    field_name="date_of_birth",
+                    doc_a_type=reference_doc.detected_type,
+                    doc_b_type=current_doc.detected_type,
+                    value_a=reference_dob,
+                    value_b=current_dob,
+                    similarity_score=0.0,
+                    explanation=(
+                        "Date of birth values do not match and require action."
+                    ),
+                )
+            )
+
+    return consistent_count, mismatch_count
+
+
 def check_eligibility_rules(session) -> tuple[bool, list[str]]:
     """Check scholarship eligibility rules against extracted fields."""
 
@@ -150,11 +221,18 @@ def run_name_verification(session) -> None:
 
     session.discrepancies = []
 
-    consistent_count, mismatch_count = check_name_consistency(session)
+    name_consistent_count, name_mismatch_count = check_name_consistency(session)
+    dob_consistent_count, dob_mismatch_count = check_dob_consistency(session)
+
     eligible, eligibility_reasons = check_eligibility_rules(session)
 
-    session.readiness.fields_consistent = consistent_count
-    session.readiness.potential_mismatches = mismatch_count
+    session.readiness.fields_consistent = (
+        name_consistent_count + dob_consistent_count
+    )
+
+    session.readiness.potential_mismatches = (
+        name_mismatch_count + dob_mismatch_count
+    )
 
     missing_documents = session.readiness.required_documents_missing
 
@@ -190,12 +268,12 @@ def run_name_verification(session) -> None:
 
         if action_required_mismatches:
             reasons.append(
-                f"{len(action_required_mismatches)} name mismatch(es) require action."
+                f"{len(action_required_mismatches)} document mismatch(es) require action."
             )
 
         if review_required_mismatches:
             reasons.append(
-                f"{len(review_required_mismatches)} name mismatch(es) require human review."
+                f"{len(review_required_mismatches)} document mismatch(es) require human review."
             )
 
         session.readiness.status_message = " ".join(reasons)
@@ -204,14 +282,14 @@ def run_name_verification(session) -> None:
     if action_required_mismatches:
         session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
         session.readiness.status_message = (
-            f"{len(action_required_mismatches)} name mismatch(es) require action."
+            f"{len(action_required_mismatches)} document mismatch(es) require action."
         )
         return
 
     if review_required_mismatches:
         session.readiness.overall_status = ReadinessStatus.IN_REVIEW
         session.readiness.status_message = (
-            f"{len(review_required_mismatches)} name mismatch(es) require human review."
+            f"{len(review_required_mismatches)} document mismatch(es) require human review."
         )
         return
 
@@ -220,5 +298,3 @@ def run_name_verification(session) -> None:
         "All required documents are present, extracted information is "
         "consistent, and scholarship eligibility rules are satisfied."
     )
-
-
