@@ -101,6 +101,16 @@ def check_name_consistency(session) -> tuple[int, int]:
                     "Name values differ significantly and require action."
                 )
 
+            if discrepancy_already_resolved(
+                session,
+                "name",
+                reference_doc.detected_type,
+                current_doc.detected_type,
+                reference_name,
+                field.value,
+            ):
+                continue
+
             session.discrepancies.append(
                 Discrepancy(
                     id=f"disc_{session.session_id}_{len(session.discrepancies) + 1}",
