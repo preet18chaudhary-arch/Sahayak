@@ -84,3 +84,19 @@ def test_resolved_name_discrepancy_is_not_recreated():
         session.discrepancies[0].resolution_note
         == "Name variation reviewed by human reviewer."
     )
+
+def test_resolved_name_discrepancy_counts_as_consistent():
+    session = create_test_session()
+
+    run_name_verification(session)
+
+    assert len(session.discrepancies) == 1
+
+    discrepancy = session.discrepancies[0]
+    discrepancy.resolved = True
+    discrepancy.resolution_note = "Name variation reviewed by human reviewer."
+
+    run_name_verification(session)
+
+    assert session.readiness.fields_consistent == 1
+    assert session.readiness.potential_mismatches == 0

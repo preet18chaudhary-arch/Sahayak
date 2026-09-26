@@ -109,6 +109,7 @@ def check_name_consistency(session) -> tuple[int, int]:
                 reference_name,
                 field.value,
             ):
+                consistent_count += 1
                 continue
 
             session.discrepancies.append(
