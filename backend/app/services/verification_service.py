@@ -16,6 +16,29 @@ def calculate_similarity(value_a: str, value_b: str) -> float:
     ).ratio()
 
 
+def discrepancy_already_resolved(
+    session,
+    field_name: str,
+    doc_a_type,
+    doc_b_type,
+    value_a: str,
+    value_b: str,
+) -> bool:
+    """Return True when the same discrepancy was already resolved by a human."""
+    for discrepancy in session.discrepancies:
+        if (
+            discrepancy.resolved
+            and discrepancy.field_name == field_name
+            and discrepancy.doc_a_type == doc_a_type
+            and discrepancy.doc_b_type == doc_b_type
+            and discrepancy.value_a == value_a
+            and discrepancy.value_b == value_b
+        ):
+            return True
+
+    return False
+
+
 def check_name_consistency(session) -> tuple[int, int]:
     """Check whether extracted name values are consistent across documents."""
 
@@ -146,6 +169,16 @@ def check_dob_consistency(session) -> tuple[int, int]:
         )
 
         if reference_doc and current_doc:
+            if discrepancy_already_resolved(
+                session,
+                "date_of_birth",
+                reference_doc.detected_type,
+                current_doc.detected_type,
+                reference_dob,
+                current_dob,
+            ):
+                continue
+
             session.discrepancies.append(
                 Discrepancy(
                     id=f"disc_{session.session_id}_{len(session.discrepancies) + 1}",
@@ -219,7 +252,13 @@ def check_eligibility_rules(session) -> tuple[bool, list[str]]:
 def run_name_verification(session) -> None:
     """Run document consistency and scholarship eligibility checks."""
 
-    session.discrepancies = []
+    resolved_discrepancies = [
+        discrepancy
+        for discrepancy in session.discrepancies
+        if discrepancy.resolved
+    ]
+
+    session.discrepancies = resolved_discrepancies
 
     name_consistent_count, name_mismatch_count = check_name_consistency(session)
     dob_consistent_count, dob_mismatch_count = check_dob_consistency(session)
@@ -230,9 +269,13 @@ def run_name_verification(session) -> None:
         name_consistent_count + dob_consistent_count
     )
 
-    session.readiness.potential_mismatches = (
-        name_mismatch_count + dob_mismatch_count
-    )
+    unresolved_mismatches = [
+        discrepancy
+        for discrepancy in session.discrepancies
+        if not discrepancy.resolved
+    ]
+
+    session.readiness.potential_mismatches = len(unresolved_mismatches)
 
     missing_documents = session.readiness.required_documents_missing
 
@@ -245,14 +288,14 @@ def run_name_verification(session) -> None:
 
     action_required_mismatches = [
         discrepancy
-        for discrepancy in session.discrepancies
+        for discrepancy in unresolved_mismatches
         if discrepancy.similarity_score
         < session.rule_config.matching_thresholds.human_review_threshold
     ]
 
     review_required_mismatches = [
         discrepancy
-        for discrepancy in session.discrepancies
+        for discrepancy in unresolved_mismatches
         if (
             discrepancy.similarity_score
             >= session.rule_config.matching_thresholds.human_review_threshold
