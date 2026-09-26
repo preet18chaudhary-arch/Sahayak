@@ -10,10 +10,19 @@ def detect_document_type(ocr_text: str) -> DocumentType:
         return DocumentType.AADHAAR
 
     if "marksheet" in text or "mark sheet" in text or "senior secondary" in text or "class xii" in text or "12th" in text:
-        if "class xii" in text or "12th" in text or "senior secondary" in text or "senior secondary school certificate" in text:
+        if (
+            "class xii" in text
+            or "12th" in text
+            or "senior secondary" in text
+            or "senior secondary school certificate" in text
+        ):
             return DocumentType.MARKSHEET_12TH
+
         if "class x" in text or "10th" in text or "secondary" in text:
             return DocumentType.MARKSHEET_10TH
+
+        if "percentage" in text or "marks" in text:
+            return DocumentType.MARKSHEET_12TH
 
     if "income certificate" in text or "annual income" in text:
         return DocumentType.INCOME_CERTIFICATE
@@ -28,5 +37,3 @@ def detect_document_type(ocr_text: str) -> DocumentType:
         return DocumentType.BANK_PASSBOOK
 
     return DocumentType.OTHER
-
-

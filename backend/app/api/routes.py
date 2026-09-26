@@ -1,9 +1,11 @@
 from typing import List
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from app.models.schemas import (
     CreateSessionRequest,
     ScholarshipRuleConfig,
     VerificationSession,
+    ReadinessStatus,
 )
 from app.services.rule_registry import (
     get_available_scholarships,
@@ -171,3 +173,80 @@ async def upload_document(
         "extracted_text": extracted_text,
         "message": "Document uploaded, OCR completed, and session updated.",
     }
+
+class ResolveDiscrepancyRequest(BaseModel):
+    resolution_note: str
+
+
+@router.post("/sessions/{session_id}/discrepancies/{discrepancy_id}/resolve")
+async def resolve_discrepancy(
+    session_id: str,
+    discrepancy_id: str,
+    request: ResolveDiscrepancyRequest,
+):
+    """Resolve a flagged discrepancy after human review."""
+
+    session = session_store.get_session(session_id)
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+
+    discrepancy = next(
+        (
+            item
+            for item in session.discrepancies
+            if item.id == discrepancy_id
+        ),
+        None,
+    )
+
+    if not discrepancy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Discrepancy '{discrepancy_id}' not found.",
+        )
+
+    discrepancy.resolved = True
+    discrepancy.resolution_note = request.resolution_note
+
+    unresolved_mismatches = [
+        item
+        for item in session.discrepancies
+        if not item.resolved
+    ]
+
+    session.readiness.potential_mismatches = len(unresolved_mismatches)
+
+    if session.readiness.required_documents_missing:
+        session.readiness.overall_status = ReadinessStatus.INCOMPLETE
+        session.readiness.status_message = (
+            "Some required documents are still missing."
+        )
+    elif unresolved_mismatches:
+        session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
+        session.readiness.status_message = (
+            f"{len(unresolved_mismatches)} document mismatch(es) require action."
+        )
+    else:
+        session.readiness.overall_status = ReadinessStatus.READY_FOR_SUBMISSION
+        session.readiness.status_message = (
+            "All required documents are present, extracted information is "
+            "consistent, and scholarship eligibility rules are satisfied."
+        )
+
+    session_store.update_session(session)
+
+    return {
+        "session_id": session_id,
+        "discrepancy_id": discrepancy_id,
+        "resolved": discrepancy.resolved,
+        "resolution_note": discrepancy.resolution_note,
+        "overall_status": session.readiness.overall_status,
+        "message": "Discrepancy resolved successfully.",
+    }
+
+
+
