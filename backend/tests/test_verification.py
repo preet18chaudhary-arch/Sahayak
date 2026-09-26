@@ -130,3 +130,36 @@ def test_resolve_discrepancy_rechecks_readiness():
     assert result["resolved"] is True
     assert result["overall_status"].value == "ACTION_REQUIRED"
     assert session.readiness.potential_mismatches == 0
+
+def test_resolved_dob_discrepancy_counts_as_consistent():
+    session = create_test_session()
+
+    session.extracted_fields = [
+        ExtractedField(
+            field_name="date_of_birth",
+            value="16/08/2002",
+            confidence=1.0,
+            source_doc_id="doc_aadhaar",
+        ),
+        ExtractedField(
+            field_name="date_of_birth",
+            value="15/08/2002",
+            confidence=1.0,
+            source_doc_id="doc_marksheet",
+        ),
+    ]
+
+    run_name_verification(session)
+
+    assert len(session.discrepancies) == 1
+
+    discrepancy = session.discrepancies[0]
+    discrepancy.resolved = True
+    discrepancy.resolution_note = "DOB variation reviewed by human reviewer."
+
+    run_name_verification(session)
+
+    assert len(session.discrepancies) == 1
+    assert session.discrepancies[0].resolved is True
+    assert session.readiness.potential_mismatches == 0
+    assert session.readiness.fields_consistent == 1

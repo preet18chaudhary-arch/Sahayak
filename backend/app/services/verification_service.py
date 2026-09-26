@@ -188,6 +188,7 @@ def check_dob_consistency(session) -> tuple[int, int]:
                 reference_dob,
                 current_dob,
             ):
+                consistent_count += 1
                 continue
 
             session.discrepancies.append(
