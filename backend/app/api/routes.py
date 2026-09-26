@@ -12,6 +12,7 @@ from app.services.rule_registry import (
     get_scholarship_rule_by_id,
 )
 from app.services.session_store import session_store
+from app.services.verification_service import run_name_verification
 
 router = APIRouter(prefix="/api", tags=["Sahayak Verification"])
 
@@ -212,31 +213,7 @@ async def resolve_discrepancy(
     discrepancy.resolved = True
     discrepancy.resolution_note = request.resolution_note
 
-    unresolved_mismatches = [
-        item
-        for item in session.discrepancies
-        if not item.resolved
-    ]
-
-    session.readiness.potential_mismatches = len(unresolved_mismatches)
-
-    if session.readiness.required_documents_missing:
-        session.readiness.overall_status = ReadinessStatus.INCOMPLETE
-        session.readiness.status_message = (
-            "Some required documents are still missing."
-        )
-    elif unresolved_mismatches:
-        session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
-        session.readiness.status_message = (
-            f"{len(unresolved_mismatches)} document mismatch(es) require action."
-        )
-    else:
-        session.readiness.overall_status = ReadinessStatus.READY_FOR_SUBMISSION
-        session.readiness.status_message = (
-            "All required documents are present, extracted information is "
-            "consistent, and scholarship eligibility rules are satisfied."
-        )
-
+    run_name_verification(session)
     session_store.update_session(session)
 
     return {
@@ -247,6 +224,3 @@ async def resolve_discrepancy(
         "overall_status": session.readiness.overall_status,
         "message": "Discrepancy resolved successfully.",
     }
-
-
-
