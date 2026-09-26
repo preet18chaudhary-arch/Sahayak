@@ -163,3 +163,97 @@ def test_resolved_dob_discrepancy_counts_as_consistent():
     assert session.discrepancies[0].resolved is True
     assert session.readiness.potential_mismatches == 0
     assert session.readiness.fields_consistent == 1
+
+def test_eligibility_passes_when_income_and_percentage_meet_rules():
+    session = create_test_session()
+
+    session.extracted_fields = [
+        ExtractedField(
+            field_name="income",
+            value="180000",
+            confidence=1.0,
+            source_doc_id="doc_income",
+        ),
+        ExtractedField(
+            field_name="percentage",
+            value="78",
+            confidence=1.0,
+            source_doc_id="doc_marksheet",
+        ),
+    ]
+
+    from app.services.verification_service import check_eligibility_rules
+
+    eligible, reasons = check_eligibility_rules(session)
+
+    assert eligible is True
+    assert reasons == []
+
+def test_eligibility_fails_when_income_exceeds_limit():
+    session = create_test_session()
+
+    session.extracted_fields = [
+        ExtractedField(
+            field_name="income",
+            value="300000",
+            confidence=1.0,
+            source_doc_id="doc_income",
+        ),
+        ExtractedField(
+            field_name="percentage",
+            value="78",
+            confidence=1.0,
+            source_doc_id="doc_marksheet",
+        ),
+    ]
+
+    from app.services.verification_service import check_eligibility_rules
+
+    eligible, reasons = check_eligibility_rules(session)
+
+    assert eligible is False
+    assert reasons == [
+        "Income exceeds the allowed scholarship limit of 250,000."
+    ]
+
+def test_eligibility_fails_when_percentage_is_below_minimum():
+    session = create_test_session()
+
+    session.extracted_fields = [
+        ExtractedField(
+            field_name="income",
+            value="180000",
+            confidence=1.0,
+            source_doc_id="doc_income",
+        ),
+        ExtractedField(
+            field_name="percentage",
+            value="50",
+            confidence=1.0,
+            source_doc_id="doc_marksheet",
+        ),
+    ]
+
+    from app.services.verification_service import check_eligibility_rules
+
+    eligible, reasons = check_eligibility_rules(session)
+
+    assert eligible is False
+    assert reasons == [
+        "Academic percentage 50.0% is below the required 60.0%."
+    ]
+
+def test_eligibility_fails_when_required_fields_are_missing():
+    session = create_test_session()
+
+    session.extracted_fields = []
+
+    from app.services.verification_service import check_eligibility_rules
+
+    eligible, reasons = check_eligibility_rules(session)
+
+    assert eligible is False
+    assert reasons == [
+        "Income information could not be verified.",
+        "Academic percentage could not be verified.",
+    ]
