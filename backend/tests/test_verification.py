@@ -100,3 +100,33 @@ def test_resolved_name_discrepancy_counts_as_consistent():
 
     assert session.readiness.fields_consistent == 1
     assert session.readiness.potential_mismatches == 0
+
+def test_resolve_discrepancy_rechecks_readiness():
+    import asyncio
+
+    from app.api.routes import ResolveDiscrepancyRequest, resolve_discrepancy
+
+    session = create_test_session()
+
+    from app.services.session_store import session_store
+    session_store.update_session(session)
+
+    run_name_verification(session)
+
+    assert len(session.discrepancies) == 1
+
+    discrepancy = session.discrepancies[0]
+
+    result = asyncio.run(
+        resolve_discrepancy(
+            session_id=session.session_id,
+            discrepancy_id=discrepancy.id,
+            request=ResolveDiscrepancyRequest(
+                resolution_note="Name variation reviewed by human reviewer."
+            ),
+        )
+    )
+
+    assert result["resolved"] is True
+    assert result["overall_status"].value == "ACTION_REQUIRED"
+    assert session.readiness.potential_mismatches == 0
