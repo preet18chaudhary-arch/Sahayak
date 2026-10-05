@@ -11,7 +11,7 @@ from app.services.rule_registry import (
     get_available_scholarships,
     get_scholarship_rule_by_id,
 )
-from app.services.session_store import session_store
+from app.services.database_session_store import session_store
 from app.services.verification_service import run_name_verification
 
 router = APIRouter(prefix="/api", tags=["Sahayak Verification"])

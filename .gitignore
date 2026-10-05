@@ -2,3 +2,12 @@ backend/.venv/
 __pycache__/
 frontend/node_modules/
 frontend/dist/
+
+# Local database
+backend/*.db
+
+# Local test files
+backend/test_database_store.py
+
+# Backup folders
+backend_before_database/
