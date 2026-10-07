@@ -1,4 +1,4 @@
-export function LandingPage({
+﻿export function LandingPage({
   studentName,
   setStudentName,
   scholarships,
@@ -172,3 +172,4 @@ export function LandingPage({
     </main>
   )
 }
+

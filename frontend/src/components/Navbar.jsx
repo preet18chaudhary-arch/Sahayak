@@ -1,9 +1,23 @@
-export function Navbar({ onReset, session }) {
+export function Navbar({
+  onReset,
+  session,
+  loggedInUser,
+  onLogout,
+}) {
   return (
     <header className="navbar">
-      <div className="logo-group" onClick={onReset} style={{ cursor: onReset ? 'pointer' : 'default' }}>
+      <div
+        className="logo-group"
+        onClick={onReset}
+        style={{
+          cursor: onReset ? 'pointer' : 'default',
+        }}
+      >
         <div className="logo">Sahayak</div>
-        <span className="logo-badge">Verification Engine</span>
+
+        <span className="logo-badge">
+          Verification Engine
+        </span>
       </div>
 
       <nav>
@@ -11,18 +25,37 @@ export function Navbar({ onReset, session }) {
           <div className="session-navbar-info">
             <span className="session-badge">
               <span className="status-dot online"></span>
+
               Session: <strong>{session.session_id}</strong>
             </span>
-            <button className="text-button" onClick={onReset}>
+
+            <button
+              className="text-button"
+              onClick={onReset}
+            >
               + New Session
+            </button>
+
+            <button
+              className="logout-button"
+              onClick={onLogout}
+            >
+              Logout
             </button>
           </div>
         ) : (
-          <>
-            <a href="#home">Home</a>
-            <a href="#how-it-works">How It Works</a>
-            <a href="#about">About</a>
-          </>
+          <div className="logged-in-navbar">
+            <span className="welcome-user">
+              Welcome, <strong>{loggedInUser}</strong>
+            </span>
+
+            <button
+              className="logout-button"
+              onClick={onLogout}
+            >
+              Logout
+            </button>
+          </div>
         )}
       </nav>
     </header>

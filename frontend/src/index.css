@@ -1,7 +1,10 @@
 :root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+
   color: #172033;
-  background: #f7f9fc;
+  background: #f5f7fb;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -12,10 +15,16 @@ html {
   scroll-behavior: smooth;
 }
 
-body {
-  margin: 0;
+html,
+body,
+#root {
   min-width: 320px;
   min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fb;
 }
 
 button,
@@ -23,4 +32,13 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+  display: block;
 }

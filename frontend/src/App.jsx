@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+
 import { Navbar } from './components/Navbar'
+import { LoginPage } from './components/LoginPage'
 import { LandingPage } from './components/LandingPage'
 import { VerificationDashboard } from './components/VerificationDashboard'
+
 import {
   createSession,
   getScholarships,
@@ -12,10 +15,16 @@ import {
 } from './services/api'
 
 function App() {
+  // Login state
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [loggedInUser, setLoggedInUser] = useState('')
+
+  // Application state
   const [screen, setScreen] = useState('home')
   const [studentName, setStudentName] = useState('Hana Sharma')
   const [scholarships, setScholarships] = useState([])
-  const [selectedScholarshipId, setSelectedScholarshipId] = useState('merit-cum-means')
+  const [selectedScholarshipId, setSelectedScholarshipId] =
+    useState('merit-cum-means')
   const [session, setSession] = useState(null)
 
   // Loading & error states
@@ -24,12 +33,34 @@ function App() {
 
   // Upload states
   const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, currentFileName: '' })
+  const [uploadProgress, setUploadProgress] = useState({
+    current: 0,
+    total: 0,
+    currentFileName: '',
+  })
   const [lastUploadResult, setLastUploadResult] = useState(null)
   const [uploadError, setUploadError] = useState('')
 
   // Discrepancy resolution state
   const [resolvingId, setResolvingId] = useState(null)
+
+  // Login
+  function handleLogin(name) {
+    setLoggedInUser(name)
+    setStudentName(name)
+    setIsLoggedIn(true)
+  }
+
+  // Logout
+  function handleLogout() {
+    setIsLoggedIn(false)
+    setLoggedInUser('')
+    setSession(null)
+    setScreen('home')
+    setError('')
+    setUploadError('')
+    setLastUploadResult(null)
+  }
 
   // Load available scholarship rule presets on mount
   useEffect(() => {
@@ -37,6 +68,7 @@ function App() {
       try {
         const schemes = await getScholarships()
         setScholarships(schemes)
+
         if (schemes.length > 0) {
           setSelectedScholarshipId(schemes[0].scholarship_id)
         }
@@ -46,8 +78,13 @@ function App() {
           {
             scholarship_id: 'merit-cum-means',
             name: 'National Merit-cum-Means Scholarship',
-            description: 'Merit scholarship for students with family income <= ₹2.5 LPA and marks >= 60%.',
-            required_documents: ['aadhaar', 'marksheet_12th', 'income_certificate'],
+            description:
+              'Merit scholarship for students with family income <= ₹2.5 LPA and marks >= 60%.',
+            required_documents: [
+              'aadhaar',
+              'marksheet_12th',
+              'income_certificate',
+            ],
             income_ceiling: 250000.0,
             min_academic_percentage: 60.0,
             matching_thresholds: {
@@ -58,6 +95,7 @@ function App() {
         ])
       }
     }
+
     initScholarships()
   }, [])
 
@@ -72,12 +110,16 @@ function App() {
     setError('')
 
     try {
-      const newSession = await createSession(studentName.trim(), selectedScholarshipId)
+      const newSession = await createSession(
+        studentName.trim(),
+        selectedScholarshipId
+      )
+
       setSession(newSession)
       setScreen('dashboard')
     } catch {
       setError(
-        'Could not connect to Sahayak backend. Please ensure the FastAPI server is running on http://127.0.0.1:8000.'
+        'Could not connect to Sahayak backend. Please ensure the FastAPI server is running on http://127.0.0.1:8001.'
       )
     } finally {
       setLoading(false)
@@ -95,30 +137,40 @@ function App() {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+
         setUploadProgress({
           current: i + 1,
           total: files.length,
           currentFileName: file.name,
         })
 
-        // Call real backend upload endpoint (one file per request)
-        const uploadResult = await uploadSingleDocument(session.session_id, file)
+        // Call real backend upload endpoint
+        const uploadResult = await uploadSingleDocument(
+          session.session_id,
+          file
+        )
+
         setLastUploadResult(uploadResult)
 
-        // Immediately refresh session using the real GET session endpoint
+        // Refresh session using the real GET session endpoint
         const refreshedSession = await getSession(session.session_id)
         setSession(refreshedSession)
       }
+
       return true
     } catch (err) {
-      setUploadError(err.message || 'An error occurred during document upload.')
+      setUploadError(
+        err.message || 'An error occurred during document upload.'
+      )
+
       // Refresh session anyway to display whatever succeeded
       try {
         const refreshed = await getSession(session.session_id)
         setSession(refreshed)
       } catch {
-        // ignore
+        // Ignore refresh error
       }
+
       return false
     } finally {
       setUploading(false)
@@ -126,27 +178,39 @@ function App() {
   }
 
   // Resolve a discrepancy and refresh session
-  async function handleResolveDiscrepancy(discrepancyId, resolutionNote) {
+  async function handleResolveDiscrepancy(
+    discrepancyId,
+    resolutionNote
+  ) {
     if (!session) return false
 
     setResolvingId(discrepancyId)
     setUploadError('')
 
     try {
-      await resolveDiscrepancy(session.session_id, discrepancyId, resolutionNote)
+      await resolveDiscrepancy(
+        session.session_id,
+        discrepancyId,
+        resolutionNote
+      )
 
       // Refresh session from real GET endpoint
       const refreshedSession = await getSession(session.session_id)
       setSession(refreshedSession)
+
       return true
     } catch (err) {
-      setUploadError(err.message || 'Failed to resolve discrepancy.')
+      setUploadError(
+        err.message || 'Failed to resolve discrepancy.'
+      )
+
       return false
     } finally {
       setResolvingId(null)
     }
   }
 
+  // Start a new verification session
   function handleReset() {
     setScreen('home')
     setSession(null)
@@ -155,9 +219,24 @@ function App() {
     setLastUploadResult(null)
   }
 
+  // Show login page before the main application
+  if (!isLoggedIn) {
+    return (
+      <div className="app">
+        <Navbar />
+        <LoginPage onLogin={handleLogin} />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
-      <Navbar onReset={session ? handleReset : null} session={session} />
+      <Navbar
+        onReset={session ? handleReset : null}
+        session={session}
+        loggedInUser={loggedInUser}
+        onLogout={handleLogout}
+      />
 
       {screen === 'home' ? (
         <LandingPage
