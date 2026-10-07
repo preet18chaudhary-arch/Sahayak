@@ -574,7 +574,7 @@ Install:
 
 ```bash
 
-git clone <repository-url>
+git clone git@github.com:preet18chaudhary-arch/Sahayak.git
 
 cd sahayak
 
