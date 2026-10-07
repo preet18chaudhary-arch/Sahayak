@@ -5,3 +5,5 @@ python-multipart>=0.0.9
 requests>=2.31.0
 pytest>=8.0.0
 sqlalchemy>=2.0.0
+pytesseract>=0.3.13
+Pillow>=12.3.0
