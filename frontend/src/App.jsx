@@ -52,15 +52,16 @@ function App() {
   }
 
   // Logout
-  function handleLogout() {
-    setIsLoggedIn(false)
-    setLoggedInUser('')
-    setSession(null)
-    setScreen('home')
-    setError('')
-    setUploadError('')
-    setLastUploadResult(null)
-  }
+function handleLogout() {
+  setIsLoggedIn(false)
+  setLoggedInUser('')
+  setStudentName('')
+  setSession(null)
+  setScreen('home')
+  setError('')
+  setUploadError('')
+  setLastUploadResult(null)
+}
 
   // Load available scholarship rule presets on mount
   useEffect(() => {
