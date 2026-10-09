@@ -20,44 +20,45 @@ export function Navbar({
         </span>
       </div>
 
-      <nav>
-        {session ? (
-          <div className="session-navbar-info">
-            <span className="session-badge">
-              <span className="status-dot online"></span>
+      {loggedInUser && onLogout && (
+        <nav>
+          {session ? (
+            <div className="session-navbar-info">
+              <span className="session-badge">
+                <span className="status-dot online"></span>
+                Session: <strong>{session.session_id}</strong>
+              </span>
 
-              Session: <strong>{session.session_id}</strong>
-            </span>
+              <button
+                className="text-button"
+                onClick={onReset}
+              >
+                + New Session
+              </button>
 
-            <button
-              className="text-button"
-              onClick={onReset}
-            >
-              + New Session
-            </button>
+              <button
+                className="logout-button"
+                onClick={onLogout}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div className="logged-in-navbar">
+              <span className="welcome-user">
+                Welcome, <strong>{loggedInUser}</strong>
+              </span>
 
-            <button
-              className="logout-button"
-              onClick={onLogout}
-            >
-              Logout
-            </button>
-          </div>
-        ) : (
-          <div className="logged-in-navbar">
-            <span className="welcome-user">
-              Welcome, <strong>{loggedInUser}</strong>
-            </span>
-
-            <button
-              className="logout-button"
-              onClick={onLogout}
-            >
-              Logout
-            </button>
-          </div>
-        )}
-      </nav>
+              <button
+                className="logout-button"
+                onClick={onLogout}
+              >
+                Logout
+              </button>
+            </div>
+          )}
+        </nav>
+      )}
     </header>
   )
 }
