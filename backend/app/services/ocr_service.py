@@ -7,10 +7,20 @@ import pytesseract
 from PIL import Image
 
 
-# Use the local Windows path only when running on Windows.
+# Configure Tesseract for the operating system.
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = (
         r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
+else:
+    import tesseract_bin
+
+    pytesseract.pytesseract.tesseract_cmd = (
+        tesseract_bin.TESSERACT_PATH
+    )
+    os.environ.setdefault(
+        "TESSDATA_PREFIX",
+        tesseract_bin.TESSDATA_PREFIX
     )
 
 
@@ -43,7 +53,7 @@ def extract_text_from_image(file_path: str) -> str:
                     pytesseract.image_to_string(image)
                 )
     else:
-        # Handle PNG, JPG, JPEG, and other PIL-supported images.
+        # Handle image files such as PNG and JPG.
         with Image.open(file_path) as image:
             extracted_pages.append(
                 pytesseract.image_to_string(image.convert("RGB"))
