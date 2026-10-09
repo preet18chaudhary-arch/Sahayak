@@ -77,3 +77,91 @@ def check_eligibility_rules(session) -> tuple[bool, list[str]]:
                 )
 
     return eligible, reasons
+    
+def run_name_verification(session) -> None:
+    """Run document consistency and scholarship eligibility checks."""
+
+    resolved_discrepancies = [
+        discrepancy
+        for discrepancy in session.discrepancies
+        if discrepancy.resolved
+    ]
+    session.discrepancies = resolved_discrepancies
+
+    name_consistent_count, _ = check_name_consistency(session)
+    dob_consistent_count, _ = check_dob_consistency(session)
+
+    eligible, eligibility_reasons = check_eligibility_rules(session)
+
+    session.readiness.fields_consistent = (
+        name_consistent_count + dob_consistent_count
+    )
+
+    unresolved_mismatches = [
+        discrepancy
+        for discrepancy in session.discrepancies
+        if not discrepancy.resolved
+    ]
+    session.readiness.potential_mismatches = len(unresolved_mismatches)
+
+    if session.readiness.required_documents_missing:
+        session.readiness.overall_status = ReadinessStatus.INCOMPLETE
+        session.readiness.status_message = (
+            "Some required documents are still missing."
+        )
+        return
+
+    thresholds = session.rule_config.matching_thresholds
+
+    action_required = [
+        discrepancy
+        for discrepancy in unresolved_mismatches
+        if discrepancy.similarity_score < thresholds.human_review_threshold
+    ]
+
+    review_required = [
+        discrepancy
+        for discrepancy in unresolved_mismatches
+        if (
+            thresholds.human_review_threshold
+            <= discrepancy.similarity_score
+            < thresholds.auto_approve_threshold
+        )
+    ]
+
+    if not eligible:
+        session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
+        reasons = list(eligibility_reasons)
+
+        if action_required:
+            reasons.append(
+                f"{len(action_required)} document mismatch(es) require action."
+            )
+        if review_required:
+            reasons.append(
+                f"{len(review_required)} document mismatch(es) require human review."
+            )
+
+        session.readiness.status_message = " ".join(reasons)
+        return
+
+    if action_required:
+        session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
+        session.readiness.status_message = (
+            f"{len(action_required)} document mismatch(es) require action."
+        )
+        return
+
+    if review_required:
+        session.readiness.overall_status = ReadinessStatus.IN_REVIEW
+        session.readiness.status_message = (
+            f"{len(review_required)} document mismatch(es) require human review."
+        )
+        return
+
+    session.readiness.overall_status = ReadinessStatus.READY_FOR_SUBMISSION
+    session.readiness.status_message = (
+        "All required documents are present, extracted information is "
+        "consistent, and scholarship eligibility rules are satisfied."
+    )
+
