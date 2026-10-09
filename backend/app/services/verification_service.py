@@ -1,39 +1,186 @@
 
-def check_eligibility_rules(session) -> tuple[bool, list[str]]:
-    """Check scholarship eligibility rules against extracted fields."""
+from difflib import SequenceMatcher
 
+from app.models.schemas import Discrepancy, ReadinessStatus
+
+
+def calculate_similarity(value_a: str, value_b: str) -> float:
+    """Return a similarity score between two text values from 0.0 to 1.0."""
+    normalized_a = value_a.strip().lower()
+    normalized_b = value_b.strip().lower()
+    return SequenceMatcher(None, normalized_a, normalized_b).ratio()
+
+
+def discrepancy_already_resolved(
+    session,
+    field_name: str,
+    doc_a_type,
+    doc_b_type,
+    value_a: str,
+    value_b: str,
+) -> bool:
+    """Check whether this discrepancy was already resolved by a human."""
+    for discrepancy in session.discrepancies:
+        if (
+            discrepancy.resolved
+            and discrepancy.field_name == field_name
+            and discrepancy.doc_a_type == doc_a_type
+            and discrepancy.doc_b_type == doc_b_type
+            and discrepancy.value_a == value_a
+            and discrepancy.value_b == value_b
+        ):
+            return True
+    return False
+
+
+def check_name_consistency(session) -> tuple[int, int]:
+    """Check extracted names across documents."""
+    name_fields = [
+        field for field in session.extracted_fields
+        if field.field_name == "name"
+    ]
+    if len(name_fields) < 2:
+        return 0, 0
+
+    reference_name = name_fields[0].value
+    reference_doc_id = name_fields[0].source_doc_id
+    consistent_count = 0
+    mismatch_count = 0
+
+    thresholds = session.rule_config.matching_thresholds
+
+    for field in name_fields[1:]:
+        similarity = calculate_similarity(reference_name, field.value)
+        if similarity >= thresholds.auto_approve_threshold:
+            consistent_count += 1
+            continue
+
+        mismatch_count += 1
+        reference_doc = next(
+            (doc for doc in session.documents
+             if doc.doc_id == reference_doc_id), None
+        )
+        current_doc = next(
+            (doc for doc in session.documents
+             if doc.doc_id == field.source_doc_id), None
+        )
+
+        if reference_doc and current_doc:
+            if discrepancy_already_resolved(
+                session, "name", reference_doc.detected_type,
+                current_doc.detected_type, reference_name, field.value
+            ):
+                consistent_count += 1
+                continue
+
+            explanation = (
+                "Name values are similar but require human review."
+                if similarity >= thresholds.human_review_threshold
+                else "Name values differ significantly and require action."
+            )
+            session.discrepancies.append(
+                Discrepancy(
+                    id=f"disc_{session.session_id}_{len(session.discrepancies) + 1}",
+                    field_name="name",
+                    doc_a_type=reference_doc.detected_type,
+                    doc_b_type=current_doc.detected_type,
+                    value_a=reference_name,
+                    value_b=field.value,
+                    similarity_score=round(similarity, 3),
+                    explanation=explanation,
+                )
+            )
+
+    return consistent_count, mismatch_count
+
+
+def normalize_date_of_birth(value: str) -> str:
+    """Normalize common date separators."""
+    return value.strip().replace("-", "/")
+
+
+def check_dob_consistency(session) -> tuple[int, int]:
+    """Check date of birth values across documents."""
+    dob_fields = [
+        field for field in session.extracted_fields
+        if field.field_name == "date_of_birth"
+    ]
+    if len(dob_fields) < 2:
+        return 0, 0
+
+    reference_dob = normalize_date_of_birth(dob_fields[0].value)
+    reference_doc_id = dob_fields[0].source_doc_id
+    consistent_count = 0
+    mismatch_count = 0
+
+    for field in dob_fields[1:]:
+        current_dob = normalize_date_of_birth(field.value)
+        if reference_dob == current_dob:
+            consistent_count += 1
+            continue
+
+        mismatch_count += 1
+        reference_doc = next(
+            (doc for doc in session.documents
+             if doc.doc_id == reference_doc_id), None
+        )
+        current_doc = next(
+            (doc for doc in session.documents
+             if doc.doc_id == field.source_doc_id), None
+        )
+
+        if reference_doc and current_doc:
+            if discrepancy_already_resolved(
+                session, "date_of_birth", reference_doc.detected_type,
+                current_doc.detected_type, reference_dob, current_dob
+            ):
+                consistent_count += 1
+                continue
+
+            session.discrepancies.append(
+                Discrepancy(
+                    id=f"disc_{session.session_id}_{len(session.discrepancies) + 1}",
+                    field_name="date_of_birth",
+                    doc_a_type=reference_doc.detected_type,
+                    doc_b_type=current_doc.detected_type,
+                    value_a=reference_dob,
+                    value_b=current_dob,
+                    similarity_score=0.0,
+                    explanation=(
+                        "Date of birth values do not match and require action."
+                    ),
+                )
+            )
+
+    return consistent_count, mismatch_count
+
+
+def check_eligibility_rules(session) -> tuple[bool, list[str]]:
+    """Check eligibility without crashing on empty or unreadable values."""
     reasons = []
     eligible = True
-
     income_ceiling = session.rule_config.income_ceiling
     minimum_percentage = session.rule_config.min_academic_percentage
 
     income_fields = [
-        field
-        for field in session.extracted_fields
+        field for field in session.extracted_fields
         if field.field_name == "income"
     ]
-
     percentage_fields = [
-        field
-        for field in session.extracted_fields
+        field for field in session.extracted_fields
         if field.field_name == "percentage"
     ]
 
     if income_ceiling is not None:
-        income_value = (
+        value = (
             str(income_fields[0].value).strip()
             if income_fields and income_fields[0].value is not None
             else ""
         )
-
         try:
-            if not income_value:
+            if not value:
                 raise ValueError("Income is missing")
-
-            income = float(
-                income_value.replace(",", "").replace("₹", "").strip()
-            )
+            income = float(value.replace(",", "").replace("₹", "").strip())
         except (ValueError, TypeError):
             eligible = False
             reasons.append(
@@ -49,19 +196,15 @@ def check_eligibility_rules(session) -> tuple[bool, list[str]]:
                 )
 
     if minimum_percentage is not None:
-        percentage_value = (
+        value = (
             str(percentage_fields[0].value).strip()
             if percentage_fields and percentage_fields[0].value is not None
             else ""
         )
-
         try:
-            if not percentage_value:
-                raise ValueError("Academic percentage is missing")
-
-            percentage = float(
-                percentage_value.replace("%", "").strip()
-            )
+            if not value:
+                raise ValueError("Percentage is missing")
+            percentage = float(value.replace("%", "").strip())
         except (ValueError, TypeError):
             eligible = False
             reasons.append(
@@ -77,29 +220,24 @@ def check_eligibility_rules(session) -> tuple[bool, list[str]]:
                 )
 
     return eligible, reasons
-    
+
+
 def run_name_verification(session) -> None:
     """Run document consistency and scholarship eligibility checks."""
-
-    resolved_discrepancies = [
-        discrepancy
-        for discrepancy in session.discrepancies
+    session.discrepancies = [
+        discrepancy for discrepancy in session.discrepancies
         if discrepancy.resolved
     ]
-    session.discrepancies = resolved_discrepancies
 
     name_consistent_count, _ = check_name_consistency(session)
     dob_consistent_count, _ = check_dob_consistency(session)
-
     eligible, eligibility_reasons = check_eligibility_rules(session)
 
     session.readiness.fields_consistent = (
         name_consistent_count + dob_consistent_count
     )
-
     unresolved_mismatches = [
-        discrepancy
-        for discrepancy in session.discrepancies
+        discrepancy for discrepancy in session.discrepancies
         if not discrepancy.resolved
     ]
     session.readiness.potential_mismatches = len(unresolved_mismatches)
@@ -112,27 +250,19 @@ def run_name_verification(session) -> None:
         return
 
     thresholds = session.rule_config.matching_thresholds
-
     action_required = [
-        discrepancy
-        for discrepancy in unresolved_mismatches
+        discrepancy for discrepancy in unresolved_mismatches
         if discrepancy.similarity_score < thresholds.human_review_threshold
     ]
-
     review_required = [
-        discrepancy
-        for discrepancy in unresolved_mismatches
-        if (
-            thresholds.human_review_threshold
-            <= discrepancy.similarity_score
-            < thresholds.auto_approve_threshold
-        )
+        discrepancy for discrepancy in unresolved_mismatches
+        if thresholds.human_review_threshold <= discrepancy.similarity_score
+        < thresholds.auto_approve_threshold
     ]
 
     if not eligible:
         session.readiness.overall_status = ReadinessStatus.ACTION_REQUIRED
         reasons = list(eligibility_reasons)
-
         if action_required:
             reasons.append(
                 f"{len(action_required)} document mismatch(es) require action."
@@ -141,7 +271,6 @@ def run_name_verification(session) -> None:
             reasons.append(
                 f"{len(review_required)} document mismatch(es) require human review."
             )
-
         session.readiness.status_message = " ".join(reasons)
         return
 
@@ -164,4 +293,3 @@ def run_name_verification(session) -> None:
         "All required documents are present, extracted information is "
         "consistent, and scholarship eligibility rules are satisfied."
     )
-
